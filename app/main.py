@@ -32,11 +32,15 @@ async def meeting_stream(websocket: WebSocket):
         while True:
             try:
                 packet = await internal_queue.get() 
-                logger.info(f"Processed packet of size {len(packet)} bytes from queue")
-                internal_queue.task_done()
+                try:
+                    logger.info(f"Processed packet of size {len(packet)} bytes from queue")
+                except Exception as e:
+                    logger.error(f"Failed processing individual frame context: {e}")
+                finally:
+                    internal_queue.task_done()
             except asyncio.CancelledError:
                 break
-                
+
     worker_task = asyncio.create_task(process_worker())
     
     # --- LISTENER (The Producer) ---
@@ -48,4 +52,10 @@ async def meeting_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("Client disconnected from the meeting stream.")
     finally:
+        try:
+            await asyncio.wait_for(internal_queue.join(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Queue draining timed out. Forcing eviction cascade.")
+        
         worker_task.cancel()
+        await asyncio.gather(worker_task, return_exceptions=True)

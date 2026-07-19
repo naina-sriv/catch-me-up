@@ -77,5 +77,29 @@ When a user asks the Copilot for the MOM (Minutes of Meeting) or what happened d
 ### 6. Discord-Driven JWT RBAC Security (Chunk 6)
 Checking a SQL database to see if a session cookie is valid on every single WebSocket request is too slow. The architecture uses stateless **JSON Web Tokens (JWT)**. Furthermore, to drop user administration overhead, we tie identity directly to Discord Roles. If Discord says you are a "Moderator", we bake an `ingest:stream` scope directly into the cryptographic JWT payload, allowing you to bypass database lookups entirely.
 
+#### Automated OAuth2 Flow
+```mermaid
+sequenceDiagram
+    participant User as User (Chrome Ext)
+    participant API as FastAPI Backend
+    participant Discord as Discord Servers
+
+    User->>API: 1. Clicks "Login with Discord"
+    API->>User: 2. Redirects to Discord OAuth2
+    
+    Discord->>API: 3. Redirects back with `code`
+    API->>Discord: 4. Swaps code for Access Token
+    
+    API->>Discord: 5. GET /users/@me/guilds/{server_id}/member
+    Discord->>API: 6. Returns Roles Array ["role_1", "role_2"]
+    
+    Note over API: API maps "role_1" to "speaker"<br/>API maps "role_2" to "listener"
+    
+    API->>API: 7. Generates Signed JWT
+    API->>User: 8. Returns JWT to Chrome Extension
+    
+    Note over User,API: 9. Chrome Extension connects to WebSocket using JWT!
+```
+
 ---
 👉 **[View the Learning Curriculum & Roadmap](learn/ROADMAP.md)**

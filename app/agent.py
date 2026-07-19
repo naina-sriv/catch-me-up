@@ -44,10 +44,8 @@ def get_agent_pipeline():
         embedding=embeddings,
     )
     
-    # We want it to fetch the top 3 most relevant paragraphs from the meeting
     retriever = vector_store.as_retriever(search_kwargs={"k": 3})
     
-    # 5. Create the Specialized MOM Prompt Template
     system_prompt = (
         "You are 'Catch-Me-Up', an advanced AI Meeting Copilot.\n"
         "Your primary job is to generate Minutes of the Meeting (MOM) or summarize specific missed durations.\n"
@@ -65,7 +63,6 @@ def get_agent_pipeline():
         ("human", "{input}"),
     ])
     
-    # 6. Build the Chain! (This pipes the retrieved context straight into the prompt)
     question_answer_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, question_answer_chain)
     
@@ -79,8 +76,6 @@ async def ask_copilot(meeting_id: str, question: str) -> str:
     if not chain:
         return "Error: Copilot is offline. Please set your GOOGLE_API_KEY in the .env file!"
         
-    # We can pass the meeting_id as a filter to the retriever, but for this simple version
-    # we just run the chain directly!
     try:
         response = await chain.ainvoke({"input": question})
         return response["answer"]

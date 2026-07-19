@@ -3,7 +3,13 @@ import logging
 import asyncio
 import json
 import time
+import os
+import websockets as ws_client
+from dotenv import load_dotenv
 from fastapi import Request
+
+load_dotenv()
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -144,23 +150,49 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
     
     internal_queue = asyncio.Queue(maxsize=100)
     
+    # Connect to Deepgram!
+    try:
+        dg_socket = await ws_client.connect(
+            "wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
+            extra_headers={"Authorization": f"Token {DEEPGRAM_API_KEY}"}
+        )
+        logger.info("Connected to Deepgram Live API")
+    except Exception as e:
+        logger.error(f"Failed to connect to Deepgram: {e}")
+        await websocket.close(code=1011)
+        return
+    
     async def process_worker():
+        # This worker pulls binary chunks from the queue and sends them to Deepgram
         while True:
             try:
                 packet = await internal_queue.get() 
                 try:
-                    logger.info(f"Processed packet of size {len(packet)} bytes from queue")
-                    simulated_text = f"Simulated STT for {len(packet)} bytes."
-                    await commit_timeline("meeting_123", "User A", simulated_text)
-                    
+                    await dg_socket.send(packet)
                 except Exception as e:
-                    logger.error(f"Failed processing individual frame context: {e}")
+                    logger.error(f"Failed to send to Deepgram: {e}")
                 finally:
                     internal_queue.task_done()
             except asyncio.CancelledError:
                 break
+                
+    async def deepgram_receiver():
+        # This worker listens for Deepgram's transcribed JSON responses
+        try:
+            async for message in dg_socket:
+                data = json.loads(message)
+                if data.get("type") == "Results":
+                    transcript = data["channel"]["alternatives"][0]["transcript"]
+                    if transcript and transcript.strip():
+                        logger.info(f"Deepgram Transcribed: {transcript}")
+                        await commit_timeline("meeting_123", user_data.username, transcript)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Deepgram receiver error: {e}")
 
     worker_task = asyncio.create_task(process_worker())
+    receiver_task = asyncio.create_task(deepgram_receiver())
     
     try:
         while True:
@@ -175,5 +207,13 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
         except asyncio.TimeoutError:
             logger.warning("Queue draining timed out. Forcing eviction cascade.")
         
+        # We must send a generic close message (an empty byte string) to tell Deepgram we are done streaming!
+        try:
+            await dg_socket.send(b'') 
+            await dg_socket.close()
+        except:
+            pass
+            
         worker_task.cancel()
-        await asyncio.gather(worker_task, return_exceptions=True)
+        receiver_task.cancel()
+        await asyncio.gather(worker_task, receiver_task, return_exceptions=True)

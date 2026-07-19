@@ -5,7 +5,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True)
+import os
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_client = aioredis.from_url(redis_url, decode_responses=True)
 
 async def commit_timeline(meeting_id: str, speaker: str, text: str):
     """

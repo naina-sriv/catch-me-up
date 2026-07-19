@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "name": "AudioCopilot: System Capture Node",
+    "version": "1.0.0",
+    "description": "Bypasses the browser sandbox to hook native system audio (like Discord Desktop) and pipe it directly to our secure Python FastAPI WebSocket.",
+    "permissions": [
+      "desktopCapture",
+      "activeTab"
+    ],
+    "action": {
+      "default_popup": "popup.html",
+      "default_title": "Catch Me Up"
+    },
+    "background": {
+      "service_worker": "background.js",
+      "type": "module"
+    }
+}

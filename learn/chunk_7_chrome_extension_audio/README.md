@@ -1,79 +1,72 @@
-[🏠 Back to Roadmap](../ROADMAP.md) | [< Prev: Chunk 6 - JWT Security](../chunk_6_jwt_scopes_security/README.md) | [Next: Chunk 8 - Deepgram STT >](../chunk_8_deepgram_stt/README.md)\n\n---\n\n# Chunk 7: Universal Client Desktop Capture & Audio Redirection
-
-### 👶 The Concept (Explain it with Easy Examples)
-**Standard Web Apps:**
-Normally, a website or Chrome Extension is trapped in a "Sandbox". It can only record audio from your microphone or from the specific web browser tab you are looking at. But what if the meeting is happening on the native Discord Desktop app, or the Zoom Desktop app? 
-
-**Modern Universal Capture (`chrome.desktopCapture`):**
-To break out of the browser sandbox, we use a special API called `chrome.desktopCapture`. This triggers a native Operating System popup asking the user, "Which window do you want to record?" The user can select the Zoom application window, and Chrome will pull the system audio loop straight out of that native app and pipe it into our extension!
-
-### 🐣 The Simple Version (How to build it first)
-```javascript
-// A simple Javascript snippet to ask the user what to record
-
-// 1. Call getDisplayMedia. This triggers the native browser pop-up window picker.
-navigator.mediaDevices.getDisplayMedia({
-    video: true, // We have to request video to get window-level access
-    audio: true  // We want the system audio from that window
-}).then(mediaStream => {
-    
-    // 2. The user selected a window! We now have the 'mediaStream'
-    // We isolate just the Audio track from the stream.
-    const audioTrack = mediaStream.getAudioTracks()[0];
-    console.log("Currently Recording: ", audioTrack.label);
-    
-    // 3. (In a real app, you would pass this stream into a MediaRecorder 
-    //    and send the chunks to your WebSocket!)
-    
-}).catch(error => {
-    // If the user clicks "Cancel" on the pop-up, it throws an error here.
-    console.error("User denied permission to record screen.");
-});
-```
-
-### 🧠 The Production Architecture (Desktop Application Capture Bypass)
-To scale beyond browser limitations, the client layer expands permissions past traditional sandbox boundaries. By introducing `chrome.desktopCapture` API routing, the extension opens a native window picker UI, allowing users to hook the system audio channel loop directly out of any active desktop process, disabling video layers to save bandwidth, and redirecting the raw data chunks seamlessly down the existing WebSocket array.
+[🏠 Back to Roadmap](../ROADMAP.md) | [< Prev: Chunk 6 - JWT Security](../chunk_6_jwt_scopes_security/README.md)
 
 ---
 
-### 🎤 Tech Interview Drill: 8 Questions on Extension Permissions & Media
+# Chunk 7: Chrome Extension Audio Hook
 
-**1. What is the browser sandbox?**
-*Answer:* A security mechanism in web browsers that strictly isolates web pages. It prevents a website from accessing your local file system, other open tabs, or native OS applications to protect you from malware.
+### 👶 The Concept (Explain it with Easy Examples)
+**The Web Sandbox:**
+Imagine you are playing in a sandbox at the park. You are allowed to build whatever sandcastles you want *inside* the box, but you cannot reach outside the box to grab grass or dirt. Normal Websites are like this sandbox. A website can access your microphone (if you click Allow), but it **cannot** reach outside the browser to listen to what Discord or Spotify is playing on your desktop.
 
-**2. How does a Chrome Extension bypass standard website sandbox limits?**
-*Answer:* Extensions operate with higher privileges. By declaring specific requirements in the `manifest.json` file, the user explicitly grants the extension permission to bypass certain sandbox rules (like accessing all tabs).
+**The Chrome Extension (The Shovel):**
+A Chrome Extension gives us a long shovel to reach outside the sandbox. By using the `chrome.desktopCapture` API, we can hook directly into the Operating System's native audio drivers. 
 
-**3. What is the `chrome.desktopCapture` API?**
-*Answer:* It is a powerful extension API that opens a native OS window picker, allowing the user to grant the extension access to record the screen and system audio of *any* native desktop application (like Zoom or Discord), not just Chrome tabs.
-
-**4. Why is `navigator.mediaDevices.getUserMedia` alone not enough to record a Discord meeting?**
-*Answer:* `getUserMedia` can only access physical hardware inputs (like your microphone or webcam). It cannot capture the "system audio" or the output of other software applications running on your computer.
-
-**5. What is the purpose of `MediaRecorder` in Javascript?**
-*Answer:* It is an API that takes a raw MediaStream (audio/video) and encodes it into compressed binary data chunks (like WebM or Opus format) so it can be efficiently sent over a network.
-
-**6. Why should you explicitly disable the video track when capturing a desktop window for audio?**
-*Answer:* Video rendering and encoding requires massive amounts of CPU and network bandwidth. If you only need the meeting audio, disabling the video stream (`video: false`) optimizes performance and prevents lag.
-
-**7. What happens if the `WebSocket.readyState` is not `OPEN` when an audio chunk arrives?**
-*Answer:* If you try to call `websocket.send()` when the connection is closed or connecting, Javascript will throw an error and crash the script. You must always check the ready state first.
-
-**8. Code Example: How do you trigger the desktop capture picker?**
-*Answer:* 
+### 🐣 The Simple Version (How to build it first)
 ```javascript
-chrome.desktopCapture.chooseDesktopMedia(
-    ["window", "screen", "audio"], 
-    sender.tab, 
-    (streamId) => {
-        // Use the streamId to hook the audio!
-    }
-);
+// 1. Get the Screen ID from the Operating System
+chrome.desktopCapture.chooseDesktopMedia(["screen", "audio"], (streamId) => {
+    
+    // 2. Pass that ID to the Media hook
+    navigator.mediaDevices.getUserMedia({
+        audio: {
+            mandatory: {
+                chromeMediaSource: "desktop",
+                chromeMediaSourceId: streamId
+            }
+        },
+        video: false
+    }).then((stream) => {
+        // 3. We now have raw system audio! Send it to Python!
+        let socket = new WebSocket("ws://localhost:8000/ws/meeting-stream");
+        let recorder = new MediaRecorder(stream);
+        
+        recorder.ondataavailable = (event) => socket.send(event.data);
+        recorder.start(1000); // Slice audio into 1-second chunks
+    });
+});
 ```
+
+### 🧠 The Production Architecture (Bypassing Bots)
+Why did we build a Chrome Extension instead of just making a Discord Bot?
+Enterprise companies (and Discord itself) frequently block server-side Bots from joining calls. Headless server bots require massive compute overhead, WebRTC negotiation, and constant maintenance.
+
+By using a Chrome Extension, our architecture is **Zero-Intrusion**. The user simply captures their own system audio. We do not need permission from the Discord Server Admin to join the call, because we aren't a bot—we are just a lightweight native OS hook running on the client's local machine, piping binary chunks directly to our massive Python concurrency backend.
+
+---
+
+### 🎤 Tech Interview Drill: 5 Questions on WebRTC & Extensions
+
+**1. Why can't a normal React website capture Discord desktop audio?**
+*Answer:* Browser Security Sandboxing. Standard web APIs (`navigator.mediaDevices`) are strictly limited to hardware inputs (Microphones/Webcams). They cannot capture systemic OS-level audio outputs without the elevated privileges of a browser extension.
+
+**2. What is `MediaRecorder` doing to the audio stream?**
+*Answer:* It takes the continuous stream of PCM audio and encodes it into compressed binary blobs (like `audio/webm;codecs=opus`) at specified intervals (e.g., every 1000ms). This allows us to stream tiny, lightweight files to the server instead of a massive, monolithic audio file.
+
+**3. Why stream to a WebSocket instead of making HTTP POST requests every second?**
+*Answer:* HTTP POST requests have massive overhead. Every POST requires establishing a TCP connection, sending headers, waiting for an ACK, and tearing down the connection. For 1000ms audio chunks, this creates extreme network backpressure. WebSockets keep a single TCP connection permanently open, allowing raw binary blobs to be pushed instantly with zero header overhead.
+
+**4. Can a Chrome Extension run in the background if the popup is closed?**
+*Answer:* Yes, through Service Workers (Manifest V3). The `background.js` file is an asynchronous Service Worker that stays alive even when the user closes the popup UI.
+
+**5. What is the biggest drawback to the `desktopCapture` API?**
+*Answer:* The UX is highly manual. The browser forces a system-level popup asking the user to select a screen, and the user *must manually check* a tiny box that says "Share System Audio". If they forget to check the box, the API silently returns a video stream with no audio tracks!
 
 ---
 
 ### 📚 Deep-Dive Video & Resource Engine
-* 🔍 YouTube Search: `Chrome Extension Desktop Capture chooseDesktopMedia manifest v3`
-* 🔍 YouTube Search: `WebRTC MediaDevices getUserMedia audio streaming javascript`
-\n\n---\n\n[🏠 Back to Roadmap](../ROADMAP.md) | [< Prev: Chunk 6 - JWT Security](../chunk_6_jwt_scopes_security/README.md) | [Next: Chunk 8 - Deepgram STT >](../chunk_8_deepgram_stt/README.md)\n
+* 🔍 YouTube Search: `Manifest V3 Chrome Extension Tutorial`
+* 🔍 YouTube Search: `WebSockets vs HTTP Polling Explained`
+
+---
+
+[🏠 Back to Roadmap](../ROADMAP.md) | [< Prev: Chunk 6 - JWT Security](../chunk_6_jwt_scopes_security/README.md)

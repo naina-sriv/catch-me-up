@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <h2>🎙️ AudioCopilot Node</h2>
+        <p class="subtitle">Secure Desktop Capture</p>
+        
+        <div class="input-group">
+            <label>JWT Access Token:</label>
+            <input type="text" id="token-input" placeholder="Paste eyJhbGci... here" />
+            <small>Must contain the `speaker` scope.</small>
+        </div>
+
+        <div class="button-group">
+            <button id="start-btn" class="primary">Start Capturing</button>
+            <button id="stop-btn" class="secondary" disabled>Stop</button>
+        </div>
+        
+        <div class="status-box">
+            <div id="status-indicator" class="dot red"></div>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

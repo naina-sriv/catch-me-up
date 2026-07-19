@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: catch-me-up-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    volumes:
+      - ./qdrant_data:/app/qdrant_data
+    depends_on:
+      - redis
+    networks:
+      - copilot_net
+
+  redis:
+    image: redis:alpine
+    container_name: catch-me-up-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - copilot_net
+
+volumes:
+  redis_data:
+
+networks:
+  copilot_net:
+    driver: bridge

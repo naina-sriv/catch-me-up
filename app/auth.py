@@ -6,11 +6,9 @@ from fastapi import HTTPException, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-# In production, this MUST be a strong, randomly generated string stored securely in .env
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-local-dev-key")
 ALGORITHM = "HS256"
 
-# A security scheme to extract the Bearer token from the Authorization header
 security = HTTPBearer()
 
 class TokenData(BaseModel):
@@ -25,7 +23,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        # Default expiration is 24 hours
         expire = datetime.utcnow() + timedelta(hours=24)
         
     to_encode.update({"exp": expire})

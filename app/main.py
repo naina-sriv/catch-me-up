@@ -7,9 +7,6 @@ import os
 import websockets as ws_client
 from dotenv import load_dotenv
 from fastapi import Request
-
-load_dotenv()
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -19,6 +16,9 @@ from app.agent import ask_copilot
 from app.auth import create_access_token, verify_token, require_role, TokenData
 from fastapi import Depends, Query
 
+
+load_dotenv()
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,6 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
     
     internal_queue = asyncio.Queue(maxsize=100)
     
-    # Connect to Deepgram!
     try:
         dg_socket = await ws_client.connect(
             "wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
@@ -163,7 +162,6 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
         return
     
     async def process_worker():
-        # This worker pulls binary chunks from the queue and sends them to Deepgram
         while True:
             try:
                 packet = await internal_queue.get() 
@@ -177,7 +175,6 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
                 break
                 
     async def deepgram_receiver():
-        # This worker listens for Deepgram's transcribed JSON responses
         try:
             async for message in dg_socket:
                 data = json.loads(message)
@@ -206,8 +203,6 @@ async def meeting_stream(websocket: WebSocket, token: str = Query(...)):
             await asyncio.wait_for(internal_queue.join(), timeout=5.0)
         except asyncio.TimeoutError:
             logger.warning("Queue draining timed out. Forcing eviction cascade.")
-        
-        # We must send a generic close message (an empty byte string) to tell Deepgram we are done streaming!
         try:
             await dg_socket.send(b'') 
             await dg_socket.close()

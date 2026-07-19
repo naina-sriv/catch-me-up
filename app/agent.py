@@ -1,8 +1,6 @@
 import os
 import logging
 from dotenv import load_dotenv
-
-# Import LangChain and Google GenAI specific tools (Just like in Krish Naik's Course!)
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
@@ -12,7 +10,6 @@ from langchain.chains import create_retrieval_chain
 
 from app.vector_store import qdrant_client, COLLECTION_NAME
 
-# Load the environment variables (like GEMINI_API_KEY) from the .env file
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -23,28 +20,20 @@ def get_agent_pipeline():
     This connects the Qdrant Vector Store to the Gemini LLM so it can answer questions based on the meeting context!
     """
     
-    # 1. Check if the user has provided their Gemini API key
     if not os.getenv("GOOGLE_API_KEY"):
         logger.warning("No GOOGLE_API_KEY found! The Agent will not be able to answer questions.")
         return None
         
-    # 2. Initialize the Gemini LLM
-    # We use gemini-1.5-flash because it is incredibly fast and cheap, perfect for real-time agents.
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
-    
-    # 3. Setup Embeddings
-    # We switch to local HuggingFace embeddings to prevent API 404 errors!
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     
-    # 4. Connect to our existing Qdrant Vector Store (from Chunk 4)
-    # This turns our database into a LangChain "Retriever"
     vector_store = QdrantVectorStore(
         client=qdrant_client,
         collection_name=COLLECTION_NAME,
         embedding=embeddings,
     )
     
-    retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
     
     system_prompt = (
         "You are 'Catch-Me-Up', an advanced AI Meeting Copilot.\n"

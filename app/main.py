@@ -53,11 +53,14 @@ async def view_universal_mom_dashboard(request: Request, meeting_id: str):
         except:
             pass
             
-    return templates.TemplateResponse("mom.html", {
-        "request": request, 
-        "meeting_id": meeting_id, 
-        "timeline": compiled_lines
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="mom.html", 
+        context={
+            "meeting_id": meeting_id, 
+            "timeline": compiled_lines
+        }
+    )
 
 
 

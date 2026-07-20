@@ -5,8 +5,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains import create_retrieval_chain
 
 from app.vector_store import qdrant_client, COLLECTION_NAME
 

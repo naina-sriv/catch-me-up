@@ -5,7 +5,9 @@
     "description": "Bypasses the browser sandbox to hook native system audio (like Discord Desktop) and pipe it directly to our secure Python FastAPI WebSocket.",
     "permissions": [
       "desktopCapture",
-      "activeTab"
+      "activeTab",
+      "storage",
+      "offscreen"
     ],
     "action": {
       "default_popup": "popup.html",

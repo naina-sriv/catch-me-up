@@ -4,6 +4,8 @@ websockets
 redis
 qdrant-client
 langchain
+langchain-community
+langchain-qdrant
 langchain-google-genai
 google-generativeai
 pydantic
@@ -11,3 +13,6 @@ python-dotenv
 sentence-transformers
 tf-keras
 PyJWT
+langchain-core
+jinja2
+langchain-classic

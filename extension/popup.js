@@ -20,16 +20,27 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Save the token for next time
         chrome.storage.local.set({ jwt_token: token });
 
-        // Tell background.js to start capturing!
-        chrome.runtime.sendMessage({ action: "START_CAPTURE", token: token }, (response) => {
-            if (response && response.success) {
-                setRecordingState(true);
-            } else {
-                alert("Failed to start capture: " + (response?.error || "Unknown error"));
+        // 1. Call chooseDesktopMedia here where we have a UI context!
+        chrome.desktopCapture.chooseDesktopMedia(["screen", "window", "audio"], (streamId, options) => {
+            if (!streamId) {
+                alert("Canceled or no stream selected.");
+                return;
             }
+            if (!options.canRequestAudioTrack) {
+                alert("You must check 'Share audio' in the picker!");
+                return;
+            }
+
+            // 2. Send streamId and token to the background to spawn the offscreen document
+            chrome.runtime.sendMessage({ action: "START_CAPTURE", streamId: streamId, token: token }, (response) => {
+                if (response && response.success) {
+                    setRecordingState(true);
+                } else {
+                    alert("Failed to start capture: " + (response?.error || "Unknown error"));
+                }
+            });
         });
     });
 

@@ -1,15 +1,40 @@
 # 🎙️ Catch-Me-Up: Real-Time AI Meeting Copilot
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?logo=fastapi&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-Memory_Store-dc382d?logo=redis&logoColor=white)
-![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-FF0000?logo=database&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-Orchestration-1C3C3C?logo=chainlink&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google_Gemini-1.5_Flash-4285F4?logo=google&logoColor=white)
-![JWT Security](https://img.shields.io/badge/Security-Stateless_JWT-black?logo=jsonwebtokens&logoColor=white)
-A bot-free, enterprise-grade architecture designed to capture live audio from native desktop applications (Discord, Zoom, Google Meet), handle high-throughput transcription pipelines, and deliver real-time, role-secured contextual catch-ups using Vector RAG and Gemini AI.
+<div align="center">
 
-👉 **[Start Here: The Learning Curriculum & Roadmap](learn/ROADMAP.md)**
+![Python](https://img.shields.io/badge/Python-3.12+-blue?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-Memory_Store-dc382d?style=for-the-badge&logo=redis&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-FF0000?style=for-the-badge&logo=qdrant&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-Orchestration-1C3C3C?style=for-the-badge&logo=chainlink&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google_Gemini-1.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Container-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+**A bot-free, enterprise-grade architecture for live desktop audio capture, high-throughput transcription pipelines, and real-time contextual AI catch-ups.**
+
+[Curriculum & Roadmap](learn/ROADMAP.md) • [Report Bug](#) • [Request Feature](#)
+
+</div>
+
+---
+
+## 📖 Table of Contents
+- [About the Project](#-about-the-project)
+- [Core Architecture](#-core-architecture-overview)
+- [System Features](#-deep-dive-system-features)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Environment Variables](#%EF%B8%8F-environment-variables)
+- [Security Model](#-security-model)
+
+---
+
+## 🚀 About the Project
+
+**Catch-Me-Up** is an advanced AI Meeting Copilot that securely hooks into native desktop applications (like Discord, Zoom, and Google Meet) to provide real-time transcriptions and summaries. 
+
+Unlike traditional meeting bots that require headless servers and intrusive joins, this architecture intercepts native audio streams client-side and processes them through an incredibly fast, highly concurrent FastAPI/Redis backend, augmented with LangChain and Google's Gemini models for semantic retrieval.
 
 ---
 
@@ -59,47 +84,87 @@ graph TD
 
 ## 🛠️ Deep-Dive System Features
 
-### 1. Universal Desktop Audio Interception (Chunk 7)
-Avoids heavy, intrusive third-party headless server bots. Instead of being trapped in the browser sandbox, the client leverages `chrome.desktopCapture` to hook directly into the system audio output of native desktop applications (like the Discord App). It pipes raw systemic audio buffers directly to our WebSocket array.
+### 1. Universal Desktop Audio Interception
+Avoids heavy, intrusive third-party headless server bots. Using `chrome.desktopCapture` and **Manifest V3 Offscreen Documents**, the client securely hooks directly into the system audio output of native desktop apps and pipes raw binary buffers directly to our WebSocket array, completely bypassing background service worker sandbox limitations.
 
-### 2. Backpressure Mitigation & Asyncio (Chunks 1 & 2)
-Constant 100ms binary streaming creates severe network backpressure that will block Python's single-threaded event loop. Sockets behave strictly as producers, dropping raw buffers into a thread-safe `asyncio.Queue` (Memory Bucket). Independent background tasks consume from this bucket at their own pace, preventing Out-Of-Memory server crashes.
+### 2. Backpressure Mitigation & Asyncio
+Constant 100ms binary streaming creates severe network backpressure that blocks Python's single-threaded event loop. We treat WebSockets as strict producers dropping buffers into thread-safe `asyncio.Queue` (Memory Buckets). Background workers consume these at their own pace to prevent Out-Of-Memory crashes.
 
-### 3. Redis Transient Consensus & Deduplication (Chunk 3)
-Writing raw high-frequency streams directly to a Postgres SQL cluster bottlenecks I/O operations. Instead, we use a **Redis Sorted Set (ZSET)**. Timelines are saved purely in RAM. If multiple users in the same meeting upload the exact same transcript at the exact same millisecond, Redis inherently ignores the duplicate by matching the Unix timestamp scores.
+### 3. Redis Transient Consensus & Deduplication
+Writing high-frequency streams to a Postgres SQL cluster bottlenecks I/O operations. Instead, timelines are saved purely in RAM via **Redis Sorted Sets (ZSET)**. If multiple users in the same meeting upload identical transcripts simultaneously, Redis inherently drops the duplicates by matching Unix timestamp scores.
 
-### 4. Vector Eviction Cascades (Chunk 4)
-RAM is incredibly fast but expensive and limited. To prevent Redis from running out of memory during a 5-hour meeting, a background cron worker performs "Eviction Cascades". It sweeps up older transcripts, converts them into 1,536-dimensional math coordinates (Vectors), and dumps them permanently into **Qdrant Vector Database**, freeing up Redis RAM.
+### 4. Vector Eviction Cascades
+To prevent Redis from running out of memory during long meetings, a background cron worker performs "Eviction Cascades". It sweeps older transcripts, converts them into 1,536-dimensional coordinate vectors, and permanently dumps them into **Qdrant Vector DB**, freeing up Redis RAM.
 
-### 5. LangChain Agent Orchestration (Chunk 5)
-When a user asks the Copilot for the MOM (Minutes of Meeting) or what happened during a missed duration, we don't send the entire 5-hour meeting to Gemini (which would break token limits). Instead, the Agent performs **Retrieval-Augmented Generation (RAG)** using **LangChain**. It searches Qdrant for the specific chronological paragraphs mathematically closest to the user's question, and sends *only* those paragraphs to Gemini.
-
-### 6. Discord-Driven JWT RBAC Security (Chunk 6)
-Checking a SQL database to see if a session cookie is valid on every single WebSocket request is too slow. The architecture uses stateless **JSON Web Tokens (JWT)**. Furthermore, to drop user administration overhead, we tie identity directly to Discord Roles. If Discord says you are a "Moderator", we bake an `ingest:stream` scope directly into the cryptographic JWT payload, allowing you to bypass database lookups entirely.
-
-#### Automated OAuth2 Flow
-```mermaid
-sequenceDiagram
-    participant User as User (Chrome Ext)
-    participant API as FastAPI Backend
-    participant Discord as Discord Servers
-
-    User->>API: 1. Clicks "Login with Discord"
-    API->>User: 2. Redirects to Discord OAuth2
-    
-    Discord->>API: 3. Redirects back with `code`
-    API->>Discord: 4. Swaps code for Access Token
-    
-    API->>Discord: 5. GET /users/@me/guilds/{server_id}/member
-    Discord->>API: 6. Returns Roles Array ["role_1", "role_2"]
-    
-    Note over API: API maps "role_1" to "speaker"<br/>API maps "role_2" to "listener"
-    
-    API->>API: 7. Generates Signed JWT
-    API->>User: 8. Returns JWT to Chrome Extension
-    
-    Note over User,API: 9. Chrome Extension connects to WebSocket using JWT!
-```
+### 5. LangChain Agent Orchestration
+When asking the Copilot for the Minutes of Meeting (MOM), we don't send the entire 5-hour meeting to Gemini (breaking token limits). The Agent performs **Retrieval-Augmented Generation (RAG)** using **LangChain**. It searches Qdrant for chronological paragraphs mathematically closest to the question, and sends *only* those to Gemini.
 
 ---
-👉 **[View the Learning Curriculum & Roadmap](learn/ROADMAP.md)**
+
+## 🏁 Getting Started
+
+### Prerequisites
+
+You need the following installed on your machine:
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+* [Python 3.12+](https://www.python.org/downloads/) (for local dev)
+* A valid Deepgram API Key (for Speech-to-Text)
+* A valid Google AI Studio (Gemini) API Key
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-org/catch-me-up.git
+   cd catch-me-up
+   ```
+
+2. **Setup your environment variables:**
+   ```bash
+   cp .env.example .env
+   ```
+   Open `.env` and fill in your API keys.
+
+3. **Start the robust infrastructure stack:**
+   ```bash
+   docker-compose up --build
+   ```
+   *This single command spins up FastAPI, the Redis transient store, and the Qdrant Vector database.*
+
+4. **Verify it's running:**
+   Navigate to `http://localhost:8000/docs` to see the interactive Swagger UI.
+
+5. **Load the Chrome Extension:**
+   - Open Chrome and navigate to `chrome://extensions/`
+   - Enable **Developer mode** in the top right.
+   - Click **Load unpacked** and select the `extension/` folder in this repository.
+   - Click the new extension icon in your toolbar, input your JWT, and click Start Capture!
+
+---
+
+## ⚙️ Environment Variables
+
+To run this project, you will need to add the following environment variables to your `.env` file:
+
+| Variable | Description | Example |
+| :--- | :--- | :--- |
+| `GOOGLE_API_KEY` | Your Google AI Studio Key for Gemini 1.5 Flash | `AIzaSyB...` |
+| `DEEPGRAM_API_KEY` | Deepgram API key for high-speed STT models | `a1b2c3d...` |
+
+---
+
+## 🔒 Security Model
+
+### Discord-Driven JWT RBAC Security
+Checking a SQL database for session validity on every high-frequency WebSocket request is far too slow. This architecture uses stateless **JSON Web Tokens (JWT)**. 
+
+To eliminate user administration overhead, identity is tied directly to Discord Roles using OAuth2. If Discord confirms a user is a "Moderator", we bake an `ingest:stream` scope directly into the cryptographic JWT payload, allowing them to bypass database lookups entirely while maintaining strict access controls.
+
+---
+
+<div align="center">
+  Built with ❤️ for real-time collaboration.
+  <br />
+  <br />
+  <a href="learn/ROADMAP.md"><b>Explore the Learning Curriculum 👉</b></a>
+</div>

@@ -7,7 +7,7 @@
       "desktopCapture",
       "activeTab",
       "storage",
-      "offscreen"
+      "windows"
     ],
     "action": {
       "default_popup": "popup.html",
@@ -16,5 +16,9 @@
     "background": {
       "service_worker": "background.js",
       "type": "module"
-    }
+    },
+    "web_accessible_resources": [{
+      "resources": ["recorder.html", "recorder.js"],
+      "matches": ["<all_urls>"]
+    }]
 }

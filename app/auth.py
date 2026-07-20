@@ -1,63 +1,89 @@
 import jwt
 import os
+import time
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import HTTPException, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-local-dev-key")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-local-dev-key-32b!!")
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
 
+
 class TokenData(BaseModel):
     username: str
-    roles: List[str]
+    role: str = "member"          # "admin" | "member"
+    meeting_id: str = ""
+    joined_at: float = 0.0        # Unix timestamp of when token was issued
+    scope: str = "ingest:stream read:transcript"
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
-    Creates a cryptographically signed JSON Web Token (JWT).
+    Creates a cryptographically signed JWT.
+    Bakes role, meeting_id, joined_at, and scope into the payload.
     """
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(hours=24)
-        
+    to_encode.setdefault("joined_at", time.time())
+    to_encode.setdefault("scope", "ingest:stream read:transcript")
+    expire = datetime.utcnow() + (expires_delta or timedelta(hours=24))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def verify_token(token: str) -> TokenData:
     """
-    Decodes the JWT and validates the cryptographic signature.
-    If the signature is invalid or the token is expired, it raises an exception.
+    Decodes the JWT, validates the signature, and returns structured TokenData.
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("username")
-        roles: List[str] = payload.get("roles", [])
-        
+        username = payload.get("username")
         if username is None:
             raise HTTPException(status_code=401, detail="Token missing username")
-            
-        return TokenData(username=username, roles=roles)
+
+        return TokenData(
+            username=username,
+            role=payload.get("role", "member"),
+            meeting_id=payload.get("meeting_id", ""),
+            joined_at=float(payload.get("joined_at", 0.0)),
+            scope=payload.get("scope", "ingest:stream read:transcript"),
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
-def require_role(required_role: str):
+
+def require_scope(required_scope: str):
     """
-    A dependency you can inject into FastAPI routes to enforce Role-Based Access Control (RBAC).
+    FastAPI dependency: enforces that the JWT has a specific scope.
+    Both admins and members have 'ingest:stream' and 'read:transcript'.
     """
-    def role_checker(credentials: HTTPAuthorizationCredentials = Security(security)):
+    def checker(credentials: HTTPAuthorizationCredentials = Security(security)):
         token_data = verify_token(credentials.credentials)
-        if required_role not in token_data.roles:
+        if required_scope not in token_data.scope:
             raise HTTPException(
-                status_code=403, 
-                detail=f"Forbidden: You do not have the required '{required_role}' role."
+                status_code=403,
+                detail=f"Forbidden: Missing required scope '{required_scope}'."
             )
         return token_data
-    return role_checker
+    return checker
+
+
+def require_role(required_role: str):
+    """
+    FastAPI dependency: enforces that the JWT has a specific role.
+    Only used for admin-only endpoints (e.g., toggle public).
+    """
+    def checker(credentials: HTTPAuthorizationCredentials = Security(security)):
+        token_data = verify_token(credentials.credentials)
+        if token_data.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Forbidden: Requires role '{required_role}'."
+            )
+        return token_data
+    return checker

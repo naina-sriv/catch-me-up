@@ -1,39 +1,46 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "START_CAPTURE") {
-        setupOffscreenDocument(request)
-            .then(() => sendResponse({ success: true }))
-            .catch((err) => {
-                console.error("Capture failed", err);
-                sendResponse({ success: false, error: err.message });
-            });
-        return true; // Keep message channel open for async response
+        const { streamId, token } = request;
+
+        // Build the recorder URL with streamId and token as query params.
+        // This passes the streamId instantly — no async delay that would expire it!
+        const recorderUrl = chrome.runtime.getURL(
+            `recorder.html?streamId=${encodeURIComponent(streamId)}&token=${encodeURIComponent(token)}`
+        );
+
+        chrome.windows.create({
+            url: recorderUrl,
+            type: "popup",
+            width: 330,
+            height: 100,
+            focused: false  // Don't steal focus from the user
+        }, (win) => {
+            chrome.storage.local.set({ recorder_window_id: win.id });
+            sendResponse({ success: true });
+        });
+
+        return true; // Keep channel open for async response
     }
-    
+
     if (request.action === "STOP_CAPTURE") {
-        // Forward stop request to the offscreen document
+        // Tell the recorder window to stop
         chrome.runtime.sendMessage({ action: "STOP_RECORDING" });
+
+        // Also close the window after a short delay
+        chrome.storage.local.get("recorder_window_id", (res) => {
+            if (res.recorder_window_id) {
+                setTimeout(() => {
+                    chrome.windows.remove(res.recorder_window_id, () => {
+                        chrome.storage.local.remove("recorder_window_id");
+                    });
+                }, 1800);
+            }
+        });
+
         sendResponse({ success: true });
     }
-});
 
-async function setupOffscreenDocument(request) {
-    const existingContexts = await chrome.runtime.getContexts({
-        contextTypes: ['OFFSCREEN_DOCUMENT']
-    });
-
-    if (existingContexts.length === 0) {
-        // Create the offscreen document
-        await chrome.offscreen.createDocument({
-            url: 'offscreen.html',
-            reasons: ['USER_MEDIA'],
-            justification: 'Recording system audio for Meeting Copilot'
-        });
+    if (request.action === "SET_RECORDING_STATE") {
+        chrome.storage.local.set({ is_recording: request.state });
     }
-
-    // Now forward the streamId and token to the offscreen document to actually start capturing
-    chrome.runtime.sendMessage({
-        action: "START_RECORDING",
-        streamId: request.streamId,
-        token: request.token
-    });
-}
+});

@@ -12,7 +12,7 @@
 
 **A bot-free, enterprise-grade architecture for live desktop audio capture, high-throughput transcription pipelines, and real-time contextual AI catch-ups.**
 
-[Curriculum & Roadmap](learn/ROADMAP.md) • [Report Bug](#) • [Request Feature](#)
+[Report Bug](#) • [Request Feature](#)
 
 </div>
 
@@ -166,5 +166,4 @@ To eliminate user administration overhead, identity is tied directly to Discord 
   Built with ❤️ for real-time collaboration.
   <br />
   <br />
-  <a href="learn/ROADMAP.md"><b>Explore the Learning Curriculum 👉</b></a>
 </div>
